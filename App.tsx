@@ -6,7 +6,7 @@ import AdminManager from './components/Admin/AdminManager';
 import Reader from './components/Reader';
 import { dbService } from './services/dbService';
 import { Book, Author, Category, Tag, ShelfItem, User } from './types';
-import { Book as BookIcon, ChevronRight, Play, Loader2, Settings as SettingsIcon, ShieldCheck, Check } from 'lucide-react';
+import { Book as BookIcon, ChevronRight, Play, Loader2, Settings as SettingsIcon, ShieldCheck, Check, Filter, Search } from 'lucide-react';
 
 const HomePage: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
@@ -15,67 +15,179 @@ const HomePage: React.FC = () => {
 
   useEffect(() => {
     const init = async () => {
-      setBooks(await dbService.getAll<Book>('books'));
+      const allBooks = await dbService.getAll<Book>('books');
+      setBooks(allBooks.slice(0, 12)); // 首页仅展示前12本热门
       setAuthors(await dbService.getAll<Author>('authors'));
       setLoading(false);
     };
     init();
   }, []);
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
+  if (loading) return <div className="flex items-center justify-center h-96"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>;
 
   return (
-    <div className="space-y-10 pb-20">
-      <section className="relative h-64 md:h-80 rounded-[2.5rem] overflow-hidden group shadow-2xl shadow-blue-50 border border-white">
-        <img src="https://picsum.photos/seed/discover/1200/400" className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" alt="Banner" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent flex flex-col justify-center px-10 md:px-16 text-white">
-          <span className="bg-blue-600 w-fit px-4 py-1.5 rounded-full text-[10px] font-black mb-6 tracking-widest uppercase shadow-xl shadow-blue-500/30">今日精选推荐</span>
-          <h1 className="text-4xl md:text-6xl font-black mb-6 max-w-xl leading-[1.1] tracking-tight">在数字阅读中<br/>重塑你的认知世界</h1>
-          <p className="text-gray-200 max-w-sm mb-10 text-base opacity-80 leading-relaxed font-medium">深度解析，精选优质内容，从科幻史诗到文学经典，带你领略思想的魅力。</p>
-          <button className="bg-white text-black px-10 py-4 rounded-full font-black text-lg flex items-center gap-3 w-fit hover:bg-gray-100 transition-all shadow-2xl shadow-black/20 active:scale-95">
-            立刻开启探索 <Play className="w-5 h-5 fill-current" />
-          </button>
+    <div className="space-y-12 pb-20 max-w-[1400px] mx-auto">
+      {/* 优化后的横幅 */}
+      <section className="relative h-[400px] md:h-[450px] rounded-[3rem] overflow-hidden group shadow-2xl shadow-blue-100/50 border border-white">
+        <img src="https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&q=80&w=1200" className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" alt="Banner" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/40 to-transparent flex flex-col justify-center px-8 md:px-20 text-white">
+          <div className="bg-blue-600/20 backdrop-blur-md border border-blue-400/30 w-fit px-4 py-1.5 rounded-full text-[10px] font-black mb-6 tracking-widest uppercase">
+            Exclusive Selection
+          </div>
+          <h1 className="text-4xl md:text-7xl font-black mb-6 max-w-2xl leading-[1.05] tracking-tight">
+            探索无限可能<br/>阅读成就非凡
+          </h1>
+          <p className="text-gray-300 max-w-md mb-10 text-lg opacity-90 leading-relaxed font-medium">
+            我们精选全球优质数字读物，涵盖文学、科技、历史与想象，让阅读成为一种生活方式。
+          </p>
+          <div className="flex items-center gap-4">
+            <Link to="/discover" className="bg-white text-black px-10 py-4 rounded-full font-black text-lg flex items-center gap-3 w-fit hover:bg-blue-600 hover:text-white transition-all shadow-xl active:scale-95">
+              立即开启探索 <Play className="w-4 h-4 fill-current" />
+            </Link>
+          </div>
         </div>
       </section>
 
+      {/* 热门书籍板块 */}
       <section>
-        <div className="flex items-center justify-between mb-10">
-          <div>
-            <h2 className="text-3xl font-black text-gray-900 tracking-tight">热门书籍</h2>
-            <p className="text-gray-400 text-sm mt-1 font-medium">当前社区最受欢迎的书籍排行</p>
+        <div className="flex items-end justify-between mb-10">
+          <div className="space-y-1">
+            <h2 className="text-4xl font-black text-gray-900 tracking-tighter">热门书籍</h2>
+            <div className="h-1.5 w-12 bg-blue-600 rounded-full"></div>
           </div>
-          <button className="text-sm font-bold text-gray-500 hover:text-blue-600 flex items-center gap-2 transition-all bg-white px-5 py-2.5 rounded-full shadow-sm hover:shadow-md">
-            查看全部 <ChevronRight className="w-4 h-4" />
-          </button>
+          <Link to="/discover" className="group flex items-center gap-2 text-sm font-bold text-gray-400 hover:text-blue-600 transition-all bg-white px-6 py-3 rounded-2xl shadow-sm hover:shadow-md border border-gray-50">
+            查看全部 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </Link>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-8 md:gap-10">
+        
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-x-8 gap-y-12">
           {books.map(book => (
-            <Link key={book.id} to={`/book/${book.id}`} className="group relative">
-              <div className="aspect-[3/4.2] rounded-2xl overflow-hidden shadow-xl shadow-gray-200/50 group-hover:shadow-2xl group-hover:shadow-blue-200 group-hover:-translate-y-3 transition-all duration-700 relative bg-gray-100">
-                <img src={book.cover || 'https://via.placeholder.com/300x400?text=No+Cover'} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt={book.title} />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-5">
-                   <div className="text-white text-sm font-black flex items-center gap-2">立即阅读 <ChevronRight className="w-4 h-4" /></div>
+            <Link key={book.id} to={`/book/${book.id}`} className="group block">
+              <div className="relative aspect-[3/4.2] rounded-3xl overflow-hidden shadow-lg group-hover:shadow-2xl group-hover:-translate-y-4 transition-all duration-500 bg-white border border-gray-50">
+                <img src={book.cover} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={book.title} />
+                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                   <div className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-full border border-white/30 text-white font-black text-xs">详情</div>
                 </div>
               </div>
-              <div className="mt-5 space-y-1.5">
-                <h3 className="font-black text-gray-900 group-hover:text-blue-600 transition-colors truncate text-base">{book.title}</h3>
-                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">{authors.find(a => a.id === book.authorId)?.name || '未知作者'}</p>
+              <div className="mt-6 space-y-1">
+                <h3 className="font-black text-gray-900 group-hover:text-blue-600 transition-colors truncate text-lg">{book.title}</h3>
+                <p className="text-xs text-gray-400 font-black uppercase tracking-widest">{authors.find(a => a.id === book.authorId)?.name || '未知作者'}</p>
               </div>
             </Link>
           ))}
-          {books.length === 0 && (
-            <div className="col-span-full py-32 text-center border-4 border-dashed border-gray-100 rounded-[3rem] text-gray-300 flex flex-col items-center gap-4 group hover:border-blue-100 transition-all duration-500">
-               <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center group-hover:bg-blue-50 transition-colors">
-                  <BookIcon className="w-10 h-10" />
-               </div>
-               <div className="space-y-1">
-                 <p className="text-xl font-black">图书馆空空如也</p>
-                 <p className="text-sm font-medium">去 <Link to="/admin" className="text-blue-600 font-black hover:underline underline-offset-4 decoration-2">管理后台</Link> 上传并创建你的首本书籍</p>
-               </div>
-            </div>
-          )}
         </div>
+
+        {books.length === 0 && (
+          <div className="py-32 text-center bg-white rounded-[3rem] border border-gray-100 shadow-sm text-gray-300 flex flex-col items-center gap-6">
+             <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center text-gray-200">
+                <BookIcon className="w-10 h-10" />
+             </div>
+             <div className="space-y-1">
+               <p className="text-xl font-black text-gray-400">目前图书馆还是空的</p>
+               <p className="text-sm font-medium">请前往 <Link to="/admin" className="text-blue-600 font-black hover:underline underline-offset-4">管理后台</Link> 上传书籍</p>
+             </div>
+          </div>
+        )}
       </section>
+    </div>
+  );
+};
+
+const DiscoverPage: React.FC = () => {
+  const [books, setBooks] = useState<Book[]>([]);
+  const [filteredBooks, setFilteredBooks] = useState<Book[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCat, setSelectedCat] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const allBooks = await dbService.getAll<Book>('books');
+      const allCats = await dbService.getAll<Category>('categories');
+      setBooks(allBooks);
+      setFilteredBooks(allBooks);
+      setCategories(allCats);
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    let result = books;
+    if (selectedCat !== 'all') {
+      result = result.filter(b => b.categoryId === selectedCat);
+    }
+    if (searchQuery) {
+      result = result.filter(b => b.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    }
+    setFilteredBooks(result);
+  }, [selectedCat, searchQuery, books]);
+
+  if (loading) return <div className="flex items-center justify-center h-96"><Loader2 className="w-10 h-10 animate-spin text-blue-600" /></div>;
+
+  return (
+    <div className="space-y-12 pb-20">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+        <div className="space-y-2">
+          <h1 className="text-5xl font-black text-gray-900 tracking-tighter">全部书籍</h1>
+          <p className="text-gray-400 font-medium text-lg">浏览我们的完整书库资源</p>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-blue-600 transition-colors" />
+            <input 
+              type="text" 
+              placeholder="搜索书名..." 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="bg-white border border-gray-100 rounded-2xl py-3 pl-10 pr-6 outline-none shadow-sm focus:ring-2 focus:ring-blue-100 w-full sm:w-64 font-bold text-sm"
+            />
+          </div>
+          <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-gray-100 shadow-sm overflow-x-auto hide-scrollbar">
+            <button 
+              onClick={() => setSelectedCat('all')}
+              className={`px-6 py-2.5 rounded-xl text-xs font-black transition-all ${selectedCat === 'all' ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+              全部
+            </button>
+            {categories.map(cat => (
+              <button 
+                key={cat.id}
+                onClick={() => setSelectedCat(cat.id)}
+                className={`px-6 py-2.5 rounded-xl text-xs font-black whitespace-nowrap transition-all ${selectedCat === cat.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-gray-500 hover:bg-gray-50'}`}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {filteredBooks.length > 0 ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-8">
+          {filteredBooks.map(book => (
+            <Link key={book.id} to={`/book/${book.id}`} className="group">
+              <div className="aspect-[3/4.2] rounded-3xl overflow-hidden shadow-md group-hover:shadow-2xl transition-all relative border border-gray-50">
+                 <img src={book.cover} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" alt={book.title} />
+              </div>
+              <div className="mt-4">
+                <h3 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors truncate text-sm">{book.title}</h3>
+                <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mt-1">
+                  ID: {book.id.slice(0, 8)}
+                </p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="py-40 text-center flex flex-col items-center gap-6 opacity-30">
+          <Search className="w-16 h-16" />
+          <p className="text-xl font-black uppercase tracking-widest">未找到匹配书籍</p>
+          <button onClick={() => { setSelectedCat('all'); setSearchQuery(''); }} className="text-blue-600 font-black hover:underline">重置搜索条件</button>
+        </div>
+      )}
     </div>
   );
 };
@@ -125,7 +237,7 @@ const ShelfPage: React.FC = () => {
 
   return (
     <div className="space-y-12 pb-20">
-      <div>
+      <div className="space-y-1">
         <h1 className="text-4xl font-black text-gray-900 tracking-tight">我的书架</h1>
         <p className="text-gray-400 font-medium mt-1">您收藏及阅读过的所有书籍资源</p>
       </div>
@@ -134,7 +246,7 @@ const ShelfPage: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-8">
           {books.map(book => (
             <Link key={book.id} to={`/book/${book.id}`} className="group">
-              <div className="aspect-[3/4.2] rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl transition-all relative">
+              <div className="aspect-[3/4.2] rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl transition-all relative border border-gray-50">
                  <img src={book.cover} className="w-full h-full object-cover" alt={book.title} />
               </div>
               <div className="mt-4">
@@ -216,7 +328,7 @@ const BookDetailPage: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto py-8 md:py-16 space-y-16">
       <div className="flex flex-col md:flex-row gap-12 md:gap-20 items-start">
-        <div className="w-full md:w-96 shrink-0 shadow-[0_30px_70px_rgba(0,0,0,0.2)] rounded-3xl overflow-hidden aspect-[3/4.2] border border-white">
+        <div className="w-full md:w-96 shrink-0 shadow-[0_30px_70px_rgba(0,0,0,0.2)] rounded-[3rem] overflow-hidden aspect-[3/4.2] border border-white">
           <img src={book.cover || 'https://via.placeholder.com/300x400?text=No+Cover'} className="w-full h-full object-cover" alt={book.title} />
         </div>
         <div className="flex-1 space-y-10 py-6">
@@ -328,6 +440,7 @@ const App: React.FC = () => {
     <HashRouter>
       <Routes>
         <Route path="/" element={<Layout><HomePage /></Layout>} />
+        <Route path="/discover" element={<Layout><DiscoverPage /></Layout>} />
         <Route path="/shelf" element={<Layout><ShelfPage /></Layout>} />
         <Route path="/book/:bookId" element={<Layout><BookDetailPage /></Layout>} />
         <Route path="/admin" element={<Layout><AdminManager /></Layout>} />

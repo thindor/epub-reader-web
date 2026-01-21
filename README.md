@@ -1,20 +1,47 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# E-Reader Pro (在线 EPUB 阅读器)
 
-This contains everything you need to run your app locally.
+E-Reader Pro 是一款受“微信读书”启发的全功能在线 EPUB 阅读应用。它结合了极简的 UI 设计与强大的后台管理系统，为用户提供流畅的沉浸式阅读体验。
 
-View your app in AI Studio: https://ai.studio/apps/drive/1Dqq45UUm2bZO2wDaAbz0GdHABf3HBFPh
+## ✨ 主要特性
 
-## Run Locally
+- **现代感 UI**: 采用微交互、渐变色与大圆角设计，极致追求视觉美感。
+- **专业阅读引擎**: 
+  - 基于 `ePub.js` 的排版引擎，支持分页与流式显示。
+  - **实时书签**: 精确记录阅读位置（CFI），点击即可瞬间跳转。
+  - **进度同步**: 自动记录并恢复每本书的阅读进度。
+  - **个性化调节**: 支持字号缩放、主题切换（白、夜、护眼色）。
+- **同步管理后台**:
+  - **资源上传**: 支持 EPUB 文件拖拽上传并自动解析元数据。
+  - **分类管理**: 灵活定义书籍分类与标签。
+  - **用户体系**: 管理注册用户信息，确保数据隔离。
+- **个人书架系统**:
+  - 用户收藏关联，支持从详情页或阅读器自动加入书架。
+  - 支持 IndexedDB 本地持久化存储，无需服务器也能拥有完整体验。
 
-**Prerequisites:**  Node.js
+## 🛠️ 技术栈
 
+- **前端**: React 19 + TypeScript
+- **路由**: React Router v7
+- **样式**: Tailwind CSS
+- **图标**: Lucide React
+- **数据库**: IndexedDB (本地浏览器数据库)
+- **解析引擎**: ePub.js + JSZip
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 🚀 快速开始
+
+1. **首页预览**: 查看精选书籍与热门推荐。
+2. **注册/登录**: 点击右上角登录，开启个人书架同步功能。
+3. **开始阅读**: 
+   - 寻找一本书，点击“立即阅读”。
+   - 在阅读器中点击左右两侧翻页。
+   - 点击顶部书签图标保存当前位置。
+4. **管理后台**: 
+   - 点击左侧导航“后台管理”。
+   - 输入默认密码：`admin123`。
+   - 上传你自己的 `.epub` 文件，开始构建私人图书馆。
+
+## 📝 开发者备注
+
+- 本应用完全运行在客户端，通过 IndexedDB 进行数据持久化，清除浏览器缓存可能会导致数据丢失。
+- 推荐使用最新版的 Chrome 或 Edge 浏览器以获得最佳的 EPUB 渲染性能。
