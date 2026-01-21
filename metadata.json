@@ -1,0 +1,7 @@
+{
+  "name": "E-Reader Pro",
+  "description": "A WeRead-inspired EPUB online reader with a comprehensive management backend for books, authors, and categories.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
