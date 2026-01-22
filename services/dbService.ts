@@ -2,7 +2,7 @@
 import { AppState, Book, Author, Category, Tag, User, Bookmark, ShelfItem, Annotation, SiteSettings } from '../types';
 
 const DB_NAME = 'EReaderProDB';
-const DB_VERSION = 5; // Bump version for settings
+const DB_VERSION = 6; // 提升版本号以强制触发 schema 更新
 
 export const dbService = {
   init: (): Promise<IDBDatabase> => {
@@ -12,6 +12,8 @@ export const dbService = {
       request.onsuccess = () => resolve(request.result);
       request.onupgradeneeded = (event: any) => {
         const db = event.target.result;
+        
+        // 核心表
         if (!db.objectStoreNames.contains('books')) db.createObjectStore('books', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('authors')) db.createObjectStore('authors', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('categories')) db.createObjectStore('categories', { keyPath: 'id' });
@@ -19,6 +21,7 @@ export const dbService = {
         if (!db.objectStoreNames.contains('users')) db.createObjectStore('users', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'id' });
         
+        // 业务表
         if (!db.objectStoreNames.contains('bookmarks')) {
           const bookmarkStore = db.createObjectStore('bookmarks', { keyPath: 'id' });
           bookmarkStore.createIndex('by-user-book', ['userId', 'bookId'], { unique: false });
@@ -31,7 +34,8 @@ export const dbService = {
 
         if (!db.objectStoreNames.contains('annotations')) {
           const annotationStore = db.createObjectStore('annotations', { keyPath: 'id' });
-          annotationStore.createIndex('by-user-book', ['userId', 'bookId'], { unique: false });
+          annotationStore.createIndex('userId', 'userId', { unique: false });
+          annotationStore.createIndex('bookId', 'bookId', { unique: false });
         }
       };
     });
@@ -62,11 +66,15 @@ export const dbService = {
   put: async (storeName: string, item: any): Promise<void> => {
     const db = await dbService.init();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction(storeName, 'readwrite');
-      const store = transaction.objectStore(storeName);
-      const request = store.put(item);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      try {
+        const transaction = db.transaction(storeName, 'readwrite');
+        const store = transaction.objectStore(storeName);
+        const request = store.put(item);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      } catch (err) {
+        reject(err);
+      }
     });
   },
 
