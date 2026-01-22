@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit, Upload, User as UserIcon, Tag as TagIcon, LayoutGrid, Book as BookIcon, CheckCircle2, X, Lock, LogIn, Loader2, Users } from 'lucide-react';
+import { Plus, Trash2, Edit, Upload, User as UserIcon, Tag as TagIcon, LayoutGrid, Book as BookIcon, CheckCircle2, X, Lock, LogIn, Loader2, Users, Image as ImageIcon } from 'lucide-react';
 import { dbService } from '../../services/dbService';
 import { Book, Author, Category, Tag, User } from '../../types';
 
@@ -20,6 +20,7 @@ const AdminManager: React.FC = () => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [formData, setFormData] = useState<any>({});
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success'>('idle');
+  const [imageUploadStatus, setImageUploadStatus] = useState<'idle' | 'uploading' | 'success'>('idle');
 
   const fetchData = async () => {
     setBooks(await dbService.getAll<Book>('books'));
@@ -35,7 +36,7 @@ const AdminManager: React.FC = () => {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === 'admin123') { // Simple demo password
+    if (password === 'admin123') {
       setIsLoggedIn(true);
       sessionStorage.setItem('admin_auth', 'true');
       setLoginError('');
@@ -88,6 +89,7 @@ const AdminManager: React.FC = () => {
     setIsEditing(false);
     setFormData({});
     setUploadStatus('idle');
+    setImageUploadStatus('idle');
     fetchData();
   };
 
@@ -108,7 +110,7 @@ const AdminManager: React.FC = () => {
       setFormData({ 
         ...formData, 
         epubUrl: event.target?.result, 
-        title: file.name.replace('.epub', ''),
+        title: formData.title || file.name.replace('.epub', ''),
         description: formData.description || `一本关于 ${file.name.replace('.epub', '')} 的好书。`
       });
       setUploadStatus('success');
@@ -116,6 +118,26 @@ const AdminManager: React.FC = () => {
     reader.onerror = () => {
       alert("文件读取失败");
       setUploadStatus('idle');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setImageUploadStatus('uploading');
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setFormData({ 
+        ...formData, 
+        cover: event.target?.result
+      });
+      setImageUploadStatus('success');
+    };
+    reader.onerror = () => {
+      alert("图片读取失败");
+      setImageUploadStatus('idle');
     };
     reader.readAsDataURL(file);
   };
@@ -146,11 +168,28 @@ const AdminManager: React.FC = () => {
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">简介</label>
+                <textarea placeholder="内容简介" className="w-full border p-3 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none h-24 font-medium" value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+              </div>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">封面图片 URL</label>
-                <input placeholder="https://..." className="w-full border p-3 rounded-xl bg-gray-50 outline-none" value={formData.cover || ''} onChange={e => setFormData({ ...formData, cover: e.target.value })} />
+                <label className="block text-sm font-bold text-gray-700 mb-1">封面图片</label>
+                <div className="flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <input placeholder="封面 URL" className="flex-1 border p-3 rounded-xl bg-gray-50 outline-none text-sm" value={formData.cover || ''} onChange={e => setFormData({ ...formData, cover: e.target.value })} />
+                    <label className="cursor-pointer bg-white border-2 border-dashed border-gray-200 hover:border-blue-400 p-3 rounded-xl flex items-center justify-center transition-colors">
+                      <ImageIcon className="w-5 h-5 text-gray-400" />
+                      <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                    </label>
+                  </div>
+                  {formData.cover && (
+                    <div className="w-24 h-32 rounded-lg overflow-hidden border border-gray-100 shadow-sm">
+                      <img src={formData.cover} className="w-full h-full object-cover" alt="预览" />
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">EPUB 文件</label>
@@ -160,7 +199,7 @@ const AdminManager: React.FC = () => {
                      {uploadStatus === 'success' ? (
                        <>
                          <CheckCircle2 className="text-green-500 w-8 h-8" />
-                         <span className="text-sm font-medium text-green-700">解析成功：{formData.title}</span>
+                         <span className="text-sm font-medium text-green-700 line-clamp-1">已就绪</span>
                        </>
                      ) : (
                        <>
@@ -246,7 +285,7 @@ const AdminManager: React.FC = () => {
           ].map(tab => (
             <button
               key={tab.id}
-              onClick={() => { setActiveTab(tab.id as Tab); setIsEditing(false); setFormData({}); setUploadStatus('idle'); }}
+              onClick={() => { setActiveTab(tab.id as Tab); setIsEditing(false); setFormData({}); setUploadStatus('idle'); setImageUploadStatus('idle'); }}
               className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-gray-500 hover:bg-gray-50'}`}
             >
               {tab.icon} {tab.label}
@@ -266,7 +305,7 @@ const AdminManager: React.FC = () => {
            </p>
         </div>
         {!isEditing && (
-          <button onClick={() => { setIsEditing(true); setFormData({}); setUploadStatus('idle'); }} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all">
+          <button onClick={() => { setIsEditing(true); setFormData({}); setUploadStatus('idle'); setImageUploadStatus('idle'); }} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all">
             <Plus className="w-5 h-5" /> 新增记录
           </button>
         )}

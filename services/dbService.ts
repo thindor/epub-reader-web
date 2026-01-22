@@ -1,8 +1,8 @@
 
-import { AppState, Book, Author, Category, Tag, User, Bookmark, ShelfItem } from '../types';
+import { AppState, Book, Author, Category, Tag, User, Bookmark, ShelfItem, Annotation } from '../types';
 
 const DB_NAME = 'EReaderProDB';
-const DB_VERSION = 3; // 升级版本至 3
+const DB_VERSION = 4; // Bump version for annotations
 
 export const dbService = {
   init: (): Promise<IDBDatabase> => {
@@ -26,6 +26,11 @@ export const dbService = {
         if (!db.objectStoreNames.contains('shelf')) {
           const shelfStore = db.createObjectStore('shelf', { keyPath: 'id' });
           shelfStore.createIndex('userId', 'userId', { unique: false });
+        }
+
+        if (!db.objectStoreNames.contains('annotations')) {
+          const annotationStore = db.createObjectStore('annotations', { keyPath: 'id' });
+          annotationStore.createIndex('by-user-book', ['userId', 'bookId'], { unique: false });
         }
       };
     });

@@ -39,6 +39,18 @@ export interface Bookmark {
   createdAt: number;
 }
 
+export interface Annotation {
+  id: string;
+  userId: string;
+  bookId: string;
+  cfiRange: string;
+  text: string;
+  type: 'highlight' | 'underline';
+  color: string;
+  comment?: string;
+  createdAt: number;
+}
+
 export interface ShelfItem {
   id: string; // userId + "_" + bookId
   userId: string;
@@ -58,6 +70,8 @@ export interface Book {
   chapters: Chapter[];
   createdAt: number;
 }
+
+export type Language = 'zh' | 'en';
 
 export interface AppState {
   books: Book[];
