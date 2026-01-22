@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { X, User, Lock, Mail, ArrowRight, Loader2 } from 'lucide-react';
+import { X, User, Lock, Mail, ArrowRight, Loader2, ShieldCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { dbService } from '../../services/dbService';
 import { User as UserType } from '../../types';
 
@@ -11,6 +12,7 @@ interface AuthModalProps {
 }
 
 const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => {
+  const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -55,6 +57,11 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAdminEntry = () => {
+    onClose();
+    navigate('/admin');
   };
 
   return (
@@ -114,13 +121,23 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
             </button>
           </form>
 
-          <div className="mt-8 text-center">
+          <div className="mt-8 flex flex-col items-center gap-4">
             <button 
               onClick={() => setIsLogin(!isLogin)}
               className="text-sm font-bold text-gray-400 hover:text-blue-600 transition-colors"
             >
               {isLogin ? '还没有账号？去注册' : '已有账号？去登录'}
             </button>
+            
+            <div className="w-full pt-6 border-t border-gray-50">
+              <button 
+                onClick={handleAdminEntry}
+                className="flex items-center justify-center gap-2 w-full text-[10px] font-black uppercase tracking-widest text-gray-300 hover:text-blue-400 transition-colors group"
+              >
+                <ShieldCheck className="w-3 h-3 group-hover:scale-110 transition-transform" /> 
+                管理员入口
+              </button>
+            </div>
           </div>
         </div>
       </div>

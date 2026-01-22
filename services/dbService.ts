@@ -1,8 +1,8 @@
 
-import { AppState, Book, Author, Category, Tag, User, Bookmark, ShelfItem, Annotation } from '../types';
+import { AppState, Book, Author, Category, Tag, User, Bookmark, ShelfItem, Annotation, SiteSettings } from '../types';
 
 const DB_NAME = 'EReaderProDB';
-const DB_VERSION = 4; // Bump version for annotations
+const DB_VERSION = 5; // Bump version for settings
 
 export const dbService = {
   init: (): Promise<IDBDatabase> => {
@@ -17,6 +17,7 @@ export const dbService = {
         if (!db.objectStoreNames.contains('categories')) db.createObjectStore('categories', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('tags')) db.createObjectStore('tags', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('users')) db.createObjectStore('users', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'id' });
         
         if (!db.objectStoreNames.contains('bookmarks')) {
           const bookmarkStore = db.createObjectStore('bookmarks', { keyPath: 'id' });
@@ -43,6 +44,17 @@ export const dbService = {
       const store = transaction.objectStore(storeName);
       const request = store.getAll();
       request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  },
+
+  get: async <T>(storeName: string, id: string): Promise<T | null> => {
+    const db = await dbService.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(storeName, 'readonly');
+      const store = transaction.objectStore(storeName);
+      const request = store.get(id);
+      request.onsuccess = () => resolve(request.result || null);
       request.onerror = () => reject(request.error);
     });
   },

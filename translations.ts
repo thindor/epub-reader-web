@@ -1,5 +1,5 @@
 
-import { useMemo } from 'react';
+import React, { createContext, useContext, useState, useMemo, ReactNode } from 'react';
 
 export const translations = {
   zh: {
@@ -40,7 +40,12 @@ export const translations = {
     colorBlue: '天空蓝',
     colorPink: '亮粉',
     underline: '下划线',
-    removeAnnotation: '删除笔记'
+    removeAnnotation: '删除笔记',
+    siteConfig: '站点全局配置',
+    siteName: '网站名称',
+    siteLogo: '网站 Logo',
+    saveSettings: '保存配置',
+    uploadLogo: '上传 Logo',
   },
   en: {
     home: 'Home',
@@ -80,22 +85,53 @@ export const translations = {
     colorBlue: 'Blue',
     colorPink: 'Pink',
     underline: 'Underline',
-    removeAnnotation: 'Remove'
+    removeAnnotation: 'Remove',
+    siteConfig: 'Site Configuration',
+    siteName: 'Site Name',
+    siteLogo: 'Site Logo',
+    saveSettings: 'Save Settings',
+    uploadLogo: 'Upload Logo',
   }
 };
 
 export type TranslationKey = keyof typeof translations.zh;
+type LangType = 'zh' | 'en';
+
+interface LanguageContextType {
+  lang: LangType;
+  setLang: (l: LangType) => void;
+}
+
+const LanguageContext = createContext<LanguageContextType>({
+  lang: 'zh',
+  setLang: () => {},
+});
+
+// Use React.createElement instead of JSX to fix syntax errors in .ts file
+export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [lang, setLangState] = useState<LangType>(() => {
+    const saved = localStorage.getItem('app_lang');
+    return (saved === 'en' || saved === 'zh') ? (saved as LangType) : 'zh';
+  });
+
+  const setLang = (l: LangType) => {
+    setLangState(l);
+    localStorage.setItem('app_lang', l);
+  };
+
+  // Fixed: Replaced JSX with React.createElement to prevent parsing errors in .ts file
+  return React.createElement(LanguageContext.Provider, { value: { lang, setLang } }, children);
+};
 
 export const useTranslation = () => {
-  const savedLang = localStorage.getItem('app_lang');
-  const lang = (savedLang === 'en' || savedLang === 'zh') ? savedLang : 'zh';
+  const { lang, setLang } = useContext(LanguageContext);
 
   const t = useMemo(() => {
     return (key: TranslationKey) => {
-      const group = translations[lang as keyof typeof translations];
+      const group = translations[lang];
       return (group as any)[key] || key;
     };
   }, [lang]);
 
-  return { t, lang };
+  return { t, lang, setLang };
 };

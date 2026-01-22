@@ -58,6 +58,12 @@ export interface ShelfItem {
   addedAt: number;
 }
 
+export interface SiteSettings {
+  id: 'global';
+  siteName: string;
+  logoUrl?: string;
+}
+
 export interface Book {
   id: string;
   title: string;

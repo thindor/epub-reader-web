@@ -5,9 +5,9 @@ import Layout from './components/Layout';
 import AdminManager from './components/Admin/AdminManager';
 import Reader from './components/Reader';
 import { dbService } from './services/dbService';
-import { Book, Author, Category, Tag, ShelfItem, User } from './types';
-import { Book as BookIcon, ChevronRight, Play, Loader2, Settings as SettingsIcon, ShieldCheck, Check, Filter, Search, Globe } from 'lucide-react';
-import { useTranslation } from './translations';
+import { Book, Author, Category, Tag, ShelfItem, User, SiteSettings } from './types';
+import { Book as BookIcon, ChevronRight, Play, Loader2, Settings as SettingsIcon, ShieldCheck, Check, Filter, Search, Globe, LayoutDashboard, Image as ImageIcon, Save } from 'lucide-react';
+import { useTranslation, LanguageProvider } from './translations';
 
 const HomePage: React.FC = () => {
   const [books, setBooks] = useState<Book[]>([]);
@@ -121,9 +121,9 @@ const DiscoverPage: React.FC = () => {
             <input type="text" placeholder={t('searchPlaceholder')} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-white border border-gray-100 rounded-2xl py-3 pl-10 pr-6 outline-none shadow-sm w-full sm:w-64 font-bold text-sm" />
           </div>
           <div className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-gray-100 shadow-sm overflow-x-auto hide-scrollbar">
-            <button onClick={() => setSelectedCat('all')} className={`px-6 py-2.5 rounded-xl text-xs font-black ${selectedCat === 'all' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>All</button>
+            <button onClick={() => setSelectedCat('all')} className={`px-6 py-2.5 rounded-xl text-xs font-black ${selectedCat === 'all' ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-gray-500 hover:bg-gray-50'}`}>All</button>
             {categories.map(cat => (
-              <button key={cat.id} onClick={() => setSelectedCat(cat.id)} className={`px-6 py-2.5 rounded-xl text-xs font-black whitespace-nowrap ${selectedCat === cat.id ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>{cat.name}</button>
+              <button key={cat.id} onClick={() => setSelectedCat(cat.id)} className={`px-6 py-2.5 rounded-xl text-xs font-black whitespace-nowrap ${selectedCat === cat.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-gray-500 hover:bg-gray-50'}`}>{cat.name}</button>
             ))}
           </div>
         </div>
@@ -254,28 +254,90 @@ const BookDetailPage: React.FC = () => {
 };
 
 const SettingsPage: React.FC = () => {
-  const { t, lang } = useTranslation();
-  const handleLangChange = (l: string) => {
-    localStorage.setItem('app_lang', l);
-    // 强制触发一次重载以更新所有组件的翻译状态
-    window.location.reload();
+  const { t, lang, setLang } = useTranslation();
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>({
+    id: 'global',
+    siteName: '微信读书',
+  });
+  const [isAdminLoggedIn] = useState<boolean>(() => sessionStorage.getItem('admin_auth') === 'true');
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const settings = await dbService.get<SiteSettings>('settings', 'global');
+      if (settings) setSiteSettings(settings);
+    };
+    fetchSettings();
+  }, []);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setSiteSettings(prev => ({ ...prev, logoUrl: event.target?.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveGlobalSettings = async () => {
+    await dbService.put('settings', siteSettings);
+    // 触发全局通知而非重载
+    alert(t('bookmarkSaved'));
   };
 
   return (
     <div className="max-w-4xl mx-auto py-10 space-y-12">
       <div className="space-y-2"><h1 className="text-4xl font-black text-gray-900 tracking-tight">{t('settings')}</h1></div>
+      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-50 space-y-6">
           <h3 className="text-xl font-black text-gray-800 flex items-center gap-3"><Globe className="w-5 h-5 text-blue-600" /> {t('language')}</h3>
           <div className="flex gap-4">
-            <button onClick={() => handleLangChange('zh')} className={`flex-1 py-4 rounded-2xl font-black transition-all shadow-sm ${lang === 'zh' ? 'bg-blue-600 text-white shadow-blue-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>中文</button>
-            <button onClick={() => handleLangChange('en')} className={`flex-1 py-4 rounded-2xl font-black transition-all shadow-sm ${lang === 'en' ? 'bg-blue-600 text-white shadow-blue-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>English</button>
+            <button onClick={() => setLang('zh')} className={`flex-1 py-4 rounded-2xl font-black transition-all shadow-sm ${lang === 'zh' ? 'bg-blue-600 text-white shadow-blue-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>中文</button>
+            <button onClick={() => setLang('en')} className={`flex-1 py-4 rounded-2xl font-black transition-all shadow-sm ${lang === 'en' ? 'bg-blue-600 text-white shadow-blue-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>English</button>
           </div>
         </div>
-        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-50 space-y-6">
-          <h3 className="text-xl font-black text-gray-800 flex items-center gap-3"><ShieldCheck className="w-5 h-5 text-blue-600" /> {t('security')}</h3>
-          <button className="w-full py-4 bg-red-50 text-red-500 font-black rounded-2xl hover:bg-red-100 transition-colors">{t('clearCache')}</button>
-        </div>
+
+        {isAdminLoggedIn ? (
+          <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-50 space-y-6">
+            <h3 className="text-xl font-black text-gray-800 flex items-center gap-3"><LayoutDashboard className="w-5 h-5 text-blue-600" /> {t('siteConfig')}</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-500 mb-1">{t('siteName')}</label>
+                <input 
+                  type="text" 
+                  value={siteSettings.siteName} 
+                  onChange={e => setSiteSettings(prev => ({ ...prev, siteName: e.target.value }))}
+                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 font-bold text-sm outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-500 mb-1">{t('siteLogo')}</label>
+                <div className="flex items-center gap-4">
+                  {siteSettings.logoUrl && (
+                    <img src={siteSettings.logoUrl} className="w-12 h-12 rounded-xl object-cover border" alt="Logo" />
+                  )}
+                  <label className="flex-1 cursor-pointer bg-gray-50 hover:bg-gray-100 py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-gray-600 transition-colors">
+                    <ImageIcon className="w-4 h-4" /> {t('uploadLogo')}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                  </label>
+                </div>
+              </div>
+              <button 
+                onClick={saveGlobalSettings}
+                className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-black shadow-lg shadow-blue-100 flex items-center justify-center gap-2 hover:bg-blue-700 transition-all"
+              >
+                <Save className="w-4 h-4" /> {t('saveSettings')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-blue-50/50 p-8 rounded-[2rem] border border-blue-100/50 flex flex-col items-center justify-center text-center gap-4">
+             <ShieldCheck className="w-10 h-10 text-blue-200" />
+             <p className="text-xs font-black text-blue-400 uppercase tracking-widest leading-relaxed">请前往后台登录以修改<br/>站点全局配置</p>
+             <Link to="/admin" className="text-blue-600 font-black text-sm hover:underline">去登录</Link>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -283,17 +345,19 @@ const SettingsPage: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/" element={<Layout><HomePage /></Layout>} />
-        <Route path="/discover" element={<Layout><DiscoverPage /></Layout>} />
-        <Route path="/shelf" element={<Layout><ShelfPage /></Layout>} />
-        <Route path="/book/:bookId" element={<Layout><BookDetailPage /></Layout>} />
-        <Route path="/admin" element={<Layout><AdminManager /></Layout>} />
-        <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
-        <Route path="/reader/:bookId" element={<Reader />} />
-      </Routes>
-    </HashRouter>
+    <LanguageProvider>
+      <HashRouter>
+        <Routes>
+          <Route path="/" element={<Layout><HomePage /></Layout>} />
+          <Route path="/discover" element={<Layout><DiscoverPage /></Layout>} />
+          <Route path="/shelf" element={<Layout><ShelfPage /></Layout>} />
+          <Route path="/book/:bookId" element={<Layout><BookDetailPage /></Layout>} />
+          <Route path="/admin" element={<Layout><AdminManager /></Layout>} />
+          <Route path="/settings" element={<Layout><SettingsPage /></Layout>} />
+          <Route path="/reader/:bookId" element={<Reader />} />
+        </Routes>
+      </HashRouter>
+    </LanguageProvider>
   );
 };
 export default App;

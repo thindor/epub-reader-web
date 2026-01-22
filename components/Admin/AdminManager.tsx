@@ -40,6 +40,8 @@ const AdminManager: React.FC = () => {
       setIsLoggedIn(true);
       sessionStorage.setItem('admin_auth', 'true');
       setLoginError('');
+      // 通知 Layout 更新
+      window.dispatchEvent(new Event('admin-auth-change'));
     } else {
       setLoginError('密码错误，请重试');
     }
@@ -48,6 +50,8 @@ const AdminManager: React.FC = () => {
   const handleLogout = () => {
     setIsLoggedIn(false);
     sessionStorage.removeItem('admin_auth');
+    // 通知 Layout 更新
+    window.dispatchEvent(new Event('admin-auth-change'));
   };
 
   const handleSave = async () => {
@@ -295,7 +299,7 @@ const AdminManager: React.FC = () => {
         <button onClick={handleLogout} className="text-gray-400 text-sm font-bold hover:text-red-500 transition-colors">退出登录</button>
       </div>
 
-      <div className="flex justify-between items-center">
+      <div className="justify-between items-center flex">
         <div>
            <h2 className="text-3xl font-black text-gray-900">
              {activeTab === 'books' ? '书籍管理' : activeTab === 'authors' ? '作者管理' : activeTab === 'users' ? '注册用户管理' : '内容库'}
