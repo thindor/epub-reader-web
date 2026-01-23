@@ -1,9 +1,9 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { List, Moon, Sun, X, Loader2, AlertCircle, Bookmark as BookmarkIcon, Trash2, CheckCircle2, MessageSquare, Underline, Save, Edit3, ChevronRight } from 'lucide-react';
+import { List, Moon, Sun, X, Loader2, Bookmark, CheckCircle2, MessageSquare, Underline, Save, Edit3, ChevronRight, ChevronLeft, Type, AlignJustify } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { dbService } from '../services/dbService';
-import { Book, Bookmark, User, Annotation } from '../types';
+import { Book, User, Annotation, Bookmark as BookmarkType } from '../types';
 import { useTranslation } from '../translations';
 
 declare const ePub: any;
@@ -28,356 +28,327 @@ const Reader: React.FC = () => {
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toc, setToc] = useState<any[]>([]);
-  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [annotationsState, setAnnotationsState] = useState<Annotation[]>([]);
-  const [showToc, setShowToc] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState<'toc' | 'bookmarks' | 'annotations'>('toc');
-  const [theme, setTheme] = useState<'light' | 'dark' | 'sepia'>('light');
-  const [fontSize, setFontSize] = useState(100);
   
+  const [showToc, setShowToc] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<'toc' | 'annotations' | 'bookmarks'>('toc');
+  
+  const [theme, setTheme] = useState<'light' | 'dark' | 'sepia'>(() => (localStorage.getItem('reader_theme') as any) || 'light');
+  const [fontSize, setFontSize] = useState(() => Number(localStorage.getItem('reader_fontsize')) || 100);
+  const [lineHeight, setLineHeight] = useState(() => Number(localStorage.getItem('reader_lineheight')) || 1.5);
   const [showToast, setShowToast] = useState(false);
-  const [lastLocation, setLastLocation] = useState<string | null>(null);
 
   const [selection, setSelection] = useState<{ cfiRange: string, text: string, rect: DOMRect } | null>(null);
   const [activeComment, setActiveComment] = useState<{ cfiRange: string, text: string, existingAnn?: Annotation } | null>(null);
   const [commentValue, setCommentValue] = useState('');
-  
   const isSelectingRef = useRef(false);
 
-  const updateAnnotations = useCallback((newAnns: Annotation[]) => {
-    annotationsRef.current = newAnns;
-    setAnnotationsState(newAnns);
-  }, []);
-
-  useEffect(() => {
-    const initData = async () => {
-      try {
-        const books = await dbService.getAll<Book>('books');
-        const found = books.find(b => b.id === bookId);
-        if (found) {
-          setBookData(found);
-          const [allBookmarks, allAnns] = await Promise.all([
-            dbService.getAll<Bookmark>('bookmarks'),
-            dbService.getAll<Annotation>('annotations')
-          ]);
-          setBookmarks(allBookmarks.filter(bm => bm.bookId === bookId && bm.userId === currentUser?.id).sort((a, b) => b.createdAt - a.createdAt));
-          updateAnnotations(allAnns.filter(a => a.bookId === bookId && a.userId === currentUser?.id));
-        } else {
-          setError("Book not found");
-        }
-      } catch (err) {
-        setError("Database error");
-      }
-    };
-    initData();
-  }, [bookId, currentUser?.id, updateAnnotations]);
-
+  // 绘制标注
   const drawAnnotations = useCallback(() => {
     if (!renditionRef.current) return;
     const rendition = renditionRef.current;
-    
     annotationsRef.current.forEach(ann => {
       try {
         rendition.annotations.remove(ann.cfiRange, ann.type);
-        rendition.annotations.add(ann.type, ann.cfiRange, {}, null, 'hl-class', {
+        rendition.annotations.add(ann.type, ann.cfiRange, {}, (e: any) => {}, 'hl-class', {
           fill: ann.color,
           'fill-opacity': ann.type === 'highlight' ? '0.35' : '1',
           stroke: ann.type === 'underline' ? ann.color : 'none',
-          'stroke-width': '2.5px'
+          'stroke-width': '2px'
         });
       } catch (e) {}
     });
   }, []);
 
+  // 加载书籍基础数据
   useEffect(() => {
-    if (!bookData || !bookData.epubUrl || !viewerRef.current) return;
-    if (typeof window !== 'undefined' && !(window as any).JSZip) (window as any).JSZip = JSZip;
+    const initData = async () => {
+      const allBooks = await dbService.getAll<Book>('books');
+      const found = allBooks.find(b => b.id === bookId);
+      if (found) {
+        setBookData(found);
+        const allAnns = await dbService.getAll<Annotation>('annotations');
+        const userAnns = allAnns.filter(a => a.bookId === bookId && a.userId === currentUser?.id);
+        annotationsRef.current = userAnns;
+        setAnnotationsState(userAnns);
+        
+        const allBookmarks = await dbService.getAll<BookmarkType>('bookmarks');
+        setBookmarks(allBookmarks.filter(b => b.bookId === bookId && b.userId === currentUser?.id));
+      }
+    };
+    initData();
+  }, [bookId, currentUser?.id]);
 
-    const setupReader = async () => {
+  // 初始化阅读器引擎 (仅在书籍 ID 变化时执行)
+  useEffect(() => {
+    if (!bookData?.epubUrl || !viewerRef.current) return;
+    (window as any).JSZip = JSZip;
+
+    const setup = async () => {
       try {
-        const base64Parts = bookData.epubUrl!.split(',');
-        const binaryString = window.atob(base64Parts.length > 1 ? base64Parts[1] : base64Parts[0]);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+        const base64 = bookData.epubUrl!.split(',')[1] || bookData.epubUrl!;
+        const binary = window.atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         
         const book = ePub(bytes.buffer);
         bookInstanceRef.current = book;
-        const rendition = book.renderTo(viewerRef.current, { width: '100%', height: '100%', flow: 'paginated', manager: 'default' });
+        const rendition = book.renderTo(viewerRef.current, { width: '100%', height: '100%', flow: 'paginated' });
         renditionRef.current = rendition;
 
-        rendition.themes.default({
-          '.hl-class': { 'mix-blend-mode': 'multiply', 'cursor': 'pointer !important' },
-          '::selection': { 'background': 'rgba(59, 130, 246, 0.2) !important' }
+        // 绑定渲染后的重绘
+        rendition.on('rendered', () => {
+          drawAnnotations();
         });
-
-        rendition.themes.register({
-          dark: { body: { background: '#121212 !important', color: '#d1d1d1 !important' } },
-          sepia: { body: { background: '#f4ecd8 !important', color: '#5b4636 !important' } },
-          light: { body: { background: '#ffffff !important', color: '#333333 !important' } }
-        });
-        rendition.themes.select(theme);
-        rendition.themes.fontSize(`${fontSize}%`);
-
-        rendition.on('rendered', () => { drawAnnotations(); });
 
         rendition.on('relocated', (location: any) => {
-          setLastLocation(location.start.cfi);
-          if (currentUser) localStorage.setItem(`progress_${currentUser.id}_${bookId}`, location.start.cfi);
+          drawAnnotations();
           setSelection(null);
+          if (currentUser) localStorage.setItem(`prog_${currentUser.id}_${bookId}`, location.start.cfi);
         });
 
         rendition.on('selected', (cfiRange: string, contents: any) => {
           isSelectingRef.current = true;
           const sel = contents.window.getSelection();
           if (!sel || sel.rangeCount === 0) return;
+          const range = sel.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+          const iframe = viewerRef.current?.getBoundingClientRect();
           
-          const rect = sel.getRangeAt(0).getBoundingClientRect();
-          const iframeRect = viewerRef.current?.getBoundingClientRect();
-          
-          const adjustedRect = {
-            ...rect,
-            top: rect.top + (iframeRect?.top || 0),
-            left: rect.left + (iframeRect?.left || 0)
-          } as DOMRect;
-
-          book.getRange(cfiRange).then((rangeObj: any) => {
-            setSelection({ cfiRange, text: rangeObj.toString(), rect: adjustedRect });
-            setTimeout(() => { isSelectingRef.current = false; }, 300);
+          setSelection({ 
+            cfiRange, 
+            text: sel.toString(), 
+            rect: { 
+              ...rect, 
+              top: rect.top + (iframe?.top || 0), 
+              left: rect.left + (iframe?.left || 0) 
+            } as DOMRect 
           });
+          setTimeout(() => isSelectingRef.current = false, 300);
         });
 
+        // 左右点击翻页逻辑
         rendition.on('click', (e: any) => {
-          if (isSelectingRef.current) return;
-          if (selection) { setSelection(null); return; }
+          // 如果正在选择或菜单已弹出，不触发翻页
+          if (isSelectingRef.current || selection) { 
+            setSelection(null); 
+            return; 
+          }
+          
           const x = e.clientX;
-          const w = window.innerWidth;
-          if (x < w * 0.3) rendition.prev();
-          else if (x > w * 0.7) rendition.next();
+          const width = window.innerWidth;
+          // 点击左侧 30% 翻上一页，右侧 70% 以后翻下一页
+          if (x < width * 0.3) {
+            rendition.prev();
+          } else if (x > width * 0.7) {
+            rendition.next();
+          }
         });
 
         await book.ready;
         const nav = await book.loaded.navigation;
         setToc(nav.toc || []);
         
-        const savedProgress = currentUser ? localStorage.getItem(`progress_${currentUser.id}_${bookId}`) : null;
-        await rendition.display(savedProgress || undefined);
+        const progress = currentUser ? localStorage.getItem(`prog_${currentUser.id}_${bookId}`) : null;
+        await rendition.display(progress || undefined);
         setIsReady(true);
-      } catch (err) {
-        setError("Reader setup failed");
+      } catch (err) { 
+        setError("EPUB 加载失败"); 
       }
     };
 
-    setupReader();
-    return () => { if (bookInstanceRef.current) bookInstanceRef.current.destroy(); };
+    setup();
+    return () => {
+      if (bookInstanceRef.current) {
+        bookInstanceRef.current.destroy();
+      }
+    };
   }, [bookData?.id]);
 
+  // 独立更新样式，不重新加载书籍
   useEffect(() => {
-    if (renditionRef.current) {
-      renditionRef.current.themes.select(theme);
-      renditionRef.current.themes.fontSize(`${fontSize}%`);
-    }
-  }, [theme, fontSize]);
+    if (!renditionRef.current) return;
+    const rendition = renditionRef.current;
+    
+    rendition.themes.register({
+      dark: { body: { background: '#121212 !important', color: '#ccc !important', 'line-height': `${lineHeight} !important` } },
+      sepia: { body: { background: '#f4ecd8 !important', color: '#5b4636 !important', 'line-height': `${lineHeight} !important` } },
+      light: { body: { background: '#ffffff !important', color: '#333 !important', 'line-height': `${lineHeight} !important` } }
+    });
+    
+    rendition.themes.select(theme);
+    rendition.themes.fontSize(`${fontSize}%`);
+  }, [theme, fontSize, lineHeight]);
 
-  const addAnnotation = async (type: 'highlight' | 'underline', color: string) => {
+  const addAnn = async (type: 'highlight' | 'underline', color: string) => {
     if (!currentUser || !selection) return;
-
-    const newAnn: Annotation = {
-      id: 'ann' + Date.now(),
-      userId: currentUser.id,
-      bookId: bookId!,
-      cfiRange: selection.cfiRange,
-      text: selection.text,
-      type,
-      color,
-      createdAt: Date.now()
+    const ann: Annotation = {
+      id: 'ann' + Date.now(), userId: currentUser.id, bookId: bookId!,
+      cfiRange: selection.cfiRange, text: selection.text, type, color, createdAt: Date.now()
     };
-    
-    try {
-      await dbService.put('annotations', newAnn);
-      updateAnnotations([...annotationsRef.current, newAnn]);
-      
-      renditionRef.current.annotations.add(type, selection.cfiRange, {}, null, 'hl-class', { 
-        fill: color, 'fill-opacity': type === 'highlight' ? '0.35' : '1',
-        stroke: type === 'underline' ? color : 'none', 'stroke-width': '2.5px'
-      });
-      
-      setSelection(null);
-      renditionRef.current?.getContents()?.forEach((c: any) => c.window.getSelection().removeAllRanges());
-    } catch (e) {
-      alert("标注失败，请重试");
-    }
+    await dbService.put('annotations', ann);
+    annotationsRef.current = [...annotationsRef.current, ann];
+    setAnnotationsState([...annotationsRef.current]);
+    drawAnnotations();
+    setSelection(null);
   };
 
-  const handleSaveComment = async () => {
+  const saveComment = async () => {
     if (!currentUser || !activeComment) return;
-    
-    const annId = activeComment.existingAnn?.id || 'ann' + Date.now();
-    const newAnn: Annotation = {
-      id: annId,
-      userId: currentUser.id,
-      bookId: bookId!,
-      cfiRange: activeComment.cfiRange,
-      text: activeComment.text,
-      type: 'highlight',
-      color: '#fbbf24',
-      comment: commentValue,
-      createdAt: activeComment.existingAnn?.createdAt || Date.now()
+    const ann: Annotation = {
+      id: activeComment.existingAnn?.id || 'ann' + Date.now(), userId: currentUser.id, bookId: bookId!,
+      cfiRange: activeComment.cfiRange, text: activeComment.text, type: 'highlight', color: '#fbbf24', 
+      comment: commentValue, createdAt: Date.now()
     };
+    await dbService.put('annotations', ann);
+    const updated = activeComment.existingAnn ? annotationsRef.current.map(a => a.id === ann.id ? ann : a) : [...annotationsRef.current, ann];
+    annotationsRef.current = updated;
+    setAnnotationsState(updated);
+    drawAnnotations();
+    setActiveComment(null);
+    setCommentValue('');
+  };
 
-    try {
-      await dbService.put('annotations', newAnn);
-      
-      if (activeComment.existingAnn) {
-        updateAnnotations(annotationsRef.current.map(a => a.id === annId ? newAnn : a));
-      } else {
-        updateAnnotations([...annotationsRef.current, newAnn]);
-        // 先移除可能存在的同位置标注，再重新添加带有想法的高亮
-        renditionRef.current.annotations.remove(activeComment.cfiRange, 'highlight');
-        renditionRef.current.annotations.add('highlight', activeComment.cfiRange, {}, null, 'hl-class', { 
-          fill: '#fbbf24', 'fill-opacity': '0.35' 
-        });
-      }
-      
-      setActiveComment(null);
-      setCommentValue('');
-      setSelection(null);
-      renditionRef.current?.getContents()?.forEach((c: any) => c.window.getSelection().removeAllRanges());
-      
-      // 保存成功提示
-      setShowToast(true);
-      setTimeout(() => setShowToast(false), 2000);
-    } catch (e) {
-      alert("评论保存失败，请刷新页面重试");
+  const toggleBookmark = async () => {
+    if (!currentUser || !renditionRef.current) return;
+    const cfi = renditionRef.current.currentLocation().start.cfi;
+    const existing = bookmarks.find(b => b.cfi === cfi);
+    if (existing) {
+      await dbService.delete('bookmarks', existing.id);
+      setBookmarks(bookmarks.filter(b => b.id !== existing.id));
+    } else {
+      const b: BookmarkType = { id: 'bm' + Date.now(), userId: currentUser.id, bookId: bookId!, cfi, label: `书签 ${new Date().toLocaleTimeString()}`, createdAt: Date.now() };
+      await dbService.put('bookmarks', b);
+      setBookmarks([...bookmarks, b]);
     }
   };
-
-  const removeAnnotation = async (id: string, cfiRange: string, type: string) => {
-    await dbService.delete('annotations', id);
-    updateAnnotations(annotationsRef.current.filter(a => a.id !== id));
-    renditionRef.current?.annotations.remove(cfiRange, type);
-  };
-
-  const colors = [
-    { name: 'yellow', value: '#fbbf24', bg: 'bg-[#fbbf24]' },
-    { name: 'green', value: '#4ade80', bg: 'bg-[#4ade80]' },
-    { name: 'blue', value: '#60a5fa', bg: 'bg-[#60a5fa]' },
-    { name: 'pink', value: '#f472b6', bg: 'bg-[#f472b6]' },
-  ];
-
-  if (error) return (
-    <div className="flex flex-col items-center justify-center h-screen bg-white p-10">
-      <AlertCircle className="w-16 h-16 text-red-500 mb-6" />
-      <h2 className="text-2xl font-black mb-4">阅读器加载失败</h2>
-      <button onClick={() => navigate(-1)} className="bg-blue-600 text-white px-10 py-3 rounded-full font-bold">返回书架</button>
-    </div>
-  );
 
   return (
-    <div className={`fixed inset-0 z-50 flex flex-col overflow-hidden ${theme === 'dark' ? 'bg-[#121212]' : theme === 'sepia' ? 'bg-[#f4ecd8]' : 'bg-[#f8fafc]'}`}>
-      <header className={`h-14 px-4 flex items-center justify-between border-b shadow-sm ${theme === 'dark' ? 'border-gray-800 bg-[#121212]' : theme === 'sepia' ? 'border-[#e2d6b5] bg-[#f4ecd8]' : 'border-gray-100 bg-white'}`}>
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-xl hover:bg-black/5"><X className="w-5 h-5" /></button>
-          <span className="font-bold truncate max-w-sm">{bookData?.title}</span>
+    <div className={`fixed inset-0 z-50 flex flex-col ${theme === 'dark' ? 'bg-[#121212] text-gray-400' : theme === 'sepia' ? 'bg-[#f4ecd8] text-[#5b4636]' : 'bg-[#f8fafc] text-gray-900'}`}>
+      <header className={`h-14 px-6 flex items-center justify-between border-b ${theme === 'dark' ? 'border-white/5' : 'border-black/5'}`}>
+        <div className="flex items-center gap-4">
+          <button onClick={() => navigate(-1)} className="p-2 hover:bg-black/5 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+          <span className="font-bold truncate max-w-[200px] text-sm uppercase tracking-tight">{bookData?.title}</span>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setShowToc(!showToc)} className={`p-2 rounded-xl transition-colors ${showToc ? 'bg-blue-600 text-white' : 'hover:bg-black/5'}`}><List className="w-5 h-5" /></button>
-          <button onClick={() => setTheme(theme === 'dark' ? 'light' : theme === 'light' ? 'sepia' : 'dark')} className="p-2 rounded-xl hover:bg-black/5">{theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</button>
-          <button onClick={() => setFontSize(s => s >= 180 ? 100 : s + 20)} className="p-2 rounded-xl hover:bg-black/5 font-black text-xs">A<span className="text-[10px]">A</span></button>
+          <button onClick={() => setShowToc(!showToc)} className="p-2 hover:bg-black/5 rounded-xl transition-all"><List className="w-5 h-5" /></button>
+          <button onClick={toggleBookmark} className={`p-2 hover:bg-black/5 rounded-xl transition-all ${bookmarks.some(b => b.cfi === renditionRef.current?.currentLocation()?.start?.cfi) ? 'text-blue-500' : ''}`}><Bookmark className="w-5 h-5" /></button>
+          <button onClick={() => setShowSettings(!showSettings)} className="p-2 hover:bg-black/5 rounded-xl transition-all"><Type className="w-5 h-5" /></button>
+          <button onClick={() => {
+            const nextTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'sepia' : 'dark';
+            setTheme(nextTheme);
+            localStorage.setItem('reader_theme', nextTheme);
+          }} className="p-2 hover:bg-black/5 rounded-xl transition-all">{theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}</button>
         </div>
       </header>
 
-      <div className="flex-1 relative flex justify-center items-stretch overflow-hidden">
-        {(!isReady || showToast) && (
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[110] bg-green-500 text-white px-8 py-3 rounded-full shadow-2xl flex items-center gap-2 animate-in slide-in-from-top-4 duration-300">
-            {isReady ? <><CheckCircle2 className="w-5 h-5" /> 笔记保存成功</> : <><Loader2 className="animate-spin w-5 h-5" /> 阅读器启动中</>}
+      <div className="flex-1 relative overflow-hidden flex justify-center">
+        {!isReady && (
+          <div className="absolute inset-0 flex items-center justify-center bg-inherit z-50">
+            <Loader2 className="animate-spin w-10 h-10 text-blue-500" />
           </div>
         )}
-        <div ref={viewerRef} className="w-full h-full max-w-4xl mx-auto px-4" />
-        
-        {selection && (
-          <div 
-            className="fixed z-[60] bg-white border border-gray-100 shadow-2xl rounded-full px-3 py-2 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
-            style={{ top: Math.max(70, selection.rect.top - 75), left: Math.max(10, Math.min(window.innerWidth - 250, selection.rect.left + selection.rect.width/2 - 125)) }}
-            onMouseDown={e => e.preventDefault()}
-          >
-            <div className="flex items-center gap-2 px-1">
-              {colors.map(c => <button key={c.name} onClick={() => addAnnotation('highlight', c.value)} className={`w-7 h-7 rounded-full ${c.bg} shadow-inner hover:scale-125 transition-transform`} />)}
-            </div>
-            <div className="w-px h-6 bg-gray-100 mx-1" />
-            <button onClick={() => addAnnotation('underline', '#3b82f6')} className="p-2.5 hover:bg-blue-50 text-blue-600 rounded-full"><Underline className="w-5 h-5" /></button>
-            <button onClick={() => { setActiveComment({ cfiRange: selection.cfiRange, text: selection.text }); setSelection(null); }} className="p-2.5 hover:bg-amber-50 text-amber-500 rounded-full"><MessageSquare className="w-5 h-5" /></button>
-            <div className="w-px h-6 bg-gray-100 mx-1" />
-            <button onClick={() => setSelection(null)} className="p-2 text-gray-300 hover:text-gray-900"><X className="w-4 h-4" /></button>
-          </div>
-        )}
+        <div ref={viewerRef} className="w-full max-w-4xl h-full px-4" />
 
-        {activeComment && (
-          <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setActiveComment(null)}>
-            <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="font-black text-gray-900 text-xl">{activeComment.existingAnn ? '修改想法' : '添加评论'}</h3>
-                <button onClick={() => setActiveComment(null)} className="p-2 text-gray-400 hover:text-gray-900"><X className="w-5 h-5" /></button>
+        {/* 设置菜单 */}
+        {showSettings && (
+          <div className="absolute right-6 top-4 z-[100] bg-white rounded-3xl p-6 shadow-2xl border border-gray-100 w-72 animate-in slide-in-from-top-4 text-gray-900">
+            <div className="flex items-center justify-between mb-6">
+              <h4 className="font-black text-xs uppercase tracking-widest text-gray-400">阅读设置</h4>
+              <button onClick={() => setShowSettings(false)} className="p-1 hover:bg-gray-50 rounded-full"><X className="w-4 h-4 text-gray-400" /></button>
+            </div>
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <div className="flex justify-between text-[10px] font-black uppercase"><span>字号</span><span>{fontSize}%</span></div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setFontSize(f => Math.max(80, f - 10)); localStorage.setItem('reader_fontsize', String(Math.max(80, fontSize - 10))); }} className="flex-1 bg-gray-50 py-3 rounded-xl font-black hover:bg-gray-100 transition-colors">A-</button>
+                  <button onClick={() => { setFontSize(f => Math.min(200, f + 10)); localStorage.setItem('reader_fontsize', String(Math.min(200, fontSize + 10))); }} className="flex-1 bg-gray-50 py-3 rounded-xl font-black hover:bg-gray-100 transition-colors">A+</button>
+                </div>
               </div>
-              <div className="bg-gray-50 p-5 rounded-3xl mb-6 border-l-4 border-blue-500 italic text-gray-600 text-sm line-clamp-3">"{activeComment.text}"</div>
-              <textarea 
-                autoFocus className="w-full bg-gray-50 border-none rounded-2xl p-4 outline-none font-bold h-32 focus:ring-4 focus:ring-blue-100 text-gray-800"
-                placeholder="这一刻的想法..." value={commentValue} onChange={e => setCommentValue(e.target.value)}
-              />
-              <button onClick={handleSaveComment} className="w-full mt-6 bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
-                <Save className="w-5 h-5" /> 保存并同步至云端
-              </button>
+              <div className="space-y-3">
+                <div className="flex justify-between text-[10px] font-black uppercase"><span>行间距</span><span>{lineHeight}</span></div>
+                <div className="flex gap-2">
+                  {[1.2, 1.5, 1.8, 2.0].map(l => (
+                    <button key={l} onClick={() => { setLineHeight(l); localStorage.setItem('reader_lineheight', String(l)); }} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${lineHeight === l ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>{l}</button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
 
+        {/* 选中文字菜单 */}
+        {selection && (
+          <div className="fixed z-[200] bg-white rounded-full p-2 shadow-2xl border border-gray-100 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2" 
+               style={{ 
+                 top: Math.max(70, selection.rect.top - 80), 
+                 left: Math.max(20, Math.min(window.innerWidth - 240, selection.rect.left)) 
+               }}>
+            {['#fbbf24', '#4ade80', '#60a5fa', '#f472b6'].map(c => (
+              <button key={c} onClick={() => addAnn('highlight', c)} className="w-7 h-7 rounded-full shadow-inner hover:scale-110 transition-transform" style={{ background: c }} />
+            ))}
+            <div className="w-px h-6 bg-gray-100 mx-1" />
+            <button onClick={() => addAnn('underline', '#3b82f6')} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"><Underline className="w-5 h-5" /></button>
+            <button onClick={() => { setActiveComment({ cfiRange: selection.cfiRange, text: selection.text }); setSelection(null); }} className="p-2 text-amber-500 hover:bg-amber-50 rounded-full transition-colors"><MessageSquare className="w-5 h-5" /></button>
+            <button onClick={() => setSelection(null)} className="p-2 text-gray-300 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
+          </div>
+        )}
+
+        {/* 想法弹窗 */}
+        {activeComment && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setActiveComment(null)} />
+            <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl relative animate-in zoom-in-95 text-gray-900">
+              <button onClick={() => setActiveComment(null)} className="absolute right-8 top-8 p-2 text-gray-400 hover:bg-gray-50 rounded-full transition-all"><X className="w-5 h-5" /></button>
+              <h3 className="text-xl font-black mb-6">记录这一刻的思考</h3>
+              <div className="bg-gray-50 p-5 rounded-3xl mb-6 text-xs italic text-gray-400 border-l-4 border-blue-500 line-clamp-3 leading-relaxed">"{activeComment.text}"</div>
+              <textarea autoFocus className="w-full bg-gray-50 rounded-2xl p-4 outline-none font-bold h-36 focus:ring-4 focus:ring-blue-100 transition-all text-gray-900 border-none" placeholder="思考内容..." value={commentValue} onChange={e => setCommentValue(e.target.value)} />
+              <button onClick={saveComment} className="w-full mt-6 bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-95 transition-all">保存想法</button>
+            </div>
+          </div>
+        )}
+
+        {/* 侧边栏 */}
         {showToc && (
           <>
             <div className="absolute inset-0 bg-black/40 z-40 backdrop-blur-sm" onClick={() => setShowToc(false)} />
-            <aside className={`absolute inset-y-0 left-0 w-80 shadow-2xl z-50 flex flex-col border-r ${theme === 'dark' ? 'bg-[#1a1a1a] border-gray-800 text-gray-400' : 'bg-white border-gray-100 text-gray-600'}`}>
-              <div className="p-4 flex gap-1 border-b shrink-0">
-                {['toc', 'bookmarks', 'annotations'].map(tab => (
-                  <button key={tab} onClick={() => setSidebarTab(tab as any)} className={`flex-1 py-3 text-[10px] font-black rounded-xl transition-all uppercase ${sidebarTab === tab ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-black/5 text-gray-400'}`}>{t(tab as any)}</button>
+            <aside className={`absolute inset-y-0 left-0 w-80 z-50 flex flex-col border-r animate-in slide-in-from-left duration-300 ${theme === 'dark' ? 'bg-[#1a1a1a] border-white/5' : 'bg-white border-gray-100'}`}>
+              <div className="p-6 flex gap-1 border-b border-gray-50">
+                {['toc', 'annotations', 'bookmarks'].map(t => (
+                  <button key={t} onClick={() => setSidebarTab(t as any)} className={`flex-1 py-3 text-[10px] font-black rounded-xl transition-all ${sidebarTab === t ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-gray-400 hover:bg-gray-50'}`}>{t.toUpperCase()}</button>
                 ))}
               </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                {sidebarTab === 'toc' ? toc.map((item, idx) => (
-                  <button key={idx} onClick={() => { renditionRef.current?.display(item.href); setShowToc(false); }} className="w-full text-left px-5 py-4 text-sm rounded-2xl hover:bg-black/5 transition-all font-bold">
-                    <span className="opacity-20 mr-4 font-mono">{(idx + 1).toString().padStart(2, '0')}</span>{item.label.trim()}
-                  </button>
-                )) : sidebarTab === 'bookmarks' ? (
-                  bookmarks.length > 0 ? bookmarks.map(bm => (
-                    <div key={bm.id} onClick={() => { renditionRef.current?.display(bm.cfi); setShowToc(false); }} className="p-5 rounded-2xl mb-3 bg-black/5 hover:bg-black/10 cursor-pointer flex justify-between items-center transition-all">
-                      <div className="flex-1 min-w-0 pr-4"><div className="font-black text-sm truncate">{bm.label}</div><div className="text-[10px] opacity-30 mt-1 uppercase">{new Date(bm.createdAt).toLocaleDateString()}</div></div>
-                      <ChevronRight className="w-4 h-4 text-gray-300" />
-                    </div>
-                  )) : <div className="py-20 text-center text-xs font-black opacity-20 uppercase tracking-widest">{t('noBookmarks')}</div>
-                ) : (
-                  annotationsState.length > 0 ? annotationsState.map(ann => (
-                    <div key={ann.id} onClick={() => { renditionRef.current?.display(ann.cfiRange); setShowToc(false); }} className="p-5 rounded-3xl mb-4 border border-gray-100 hover:border-blue-100 transition-all cursor-pointer relative bg-white shadow-sm group">
-                      <div className="flex items-start gap-4">
-                         <div className="w-1.5 h-6 rounded-full shrink-0 mt-0.5" style={{ background: ann.color }} />
-                         <div className="flex-1 min-w-0">
-                            <p className="text-xs italic text-gray-400 line-clamp-3 leading-relaxed">"{ann.text}"</p>
-                            {ann.comment && <div className="mt-3 text-sm font-bold text-gray-800 bg-amber-50/50 p-4 rounded-2xl border border-amber-100/50">{ann.comment}</div>}
-                         </div>
-                      </div>
-                      <div className="absolute -top-3 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                         <button onClick={(e) => { e.stopPropagation(); setActiveComment({ cfiRange: ann.cfiRange, text: ann.text, existingAnn: ann }); setCommentValue(ann.comment || ''); }} className="p-2.5 bg-white text-blue-500 rounded-full shadow-xl border border-blue-50 hover:bg-blue-600 hover:text-white"><Edit3 className="w-3.5 h-3.5" /></button>
-                         <button onClick={(e) => { e.stopPropagation(); removeAnnotation(ann.id, ann.cfiRange, ann.type); }} className="p-2.5 bg-white text-red-500 rounded-full shadow-xl border border-red-50 hover:bg-red-600 hover:text-white"><Trash2 className="w-3.5 h-3.5" /></button>
+              <div className="flex-1 overflow-y-auto p-4 hide-scrollbar">
+                {sidebarTab === 'toc' ? toc.map((item, i) => (
+                  <button key={i} onClick={() => { renditionRef.current?.display(item.href); setShowToc(false); }} className="w-full text-left p-4 text-sm font-bold hover:bg-blue-50 hover:text-blue-600 rounded-2xl transition-all mb-1">{item.label}</button>
+                )) : sidebarTab === 'bookmarks' ? bookmarks.map(bm => (
+                  <div key={bm.id} onClick={() => { renditionRef.current?.display(bm.cfi); setShowToc(false); }} className="p-5 bg-gray-50 rounded-2xl mb-2 cursor-pointer group hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-blue-50">
+                    <div className="text-xs font-black text-gray-900">{bm.label}</div>
+                    <div className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-wider">{new Date(bm.createdAt).toLocaleDateString()}</div>
+                  </div>
+                )) : annotationsState.map(ann => (
+                  <div key={ann.id} onClick={() => { renditionRef.current?.display(ann.cfiRange); setShowToc(false); }} className="p-5 bg-gray-50 rounded-2xl mb-4 group cursor-pointer hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-blue-50">
+                    <div className="flex items-start gap-3">
+                      <div className="w-1.5 h-6 rounded-full shrink-0" style={{ background: ann.color }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] italic text-gray-400 line-clamp-2 leading-relaxed">"{ann.text}"</p>
+                        {ann.comment && <div className="mt-3 text-xs font-bold text-gray-800 leading-relaxed bg-white p-3 rounded-xl shadow-sm border border-gray-100">{ann.comment}</div>}
                       </div>
                     </div>
-                  )) : <div className="py-20 text-center text-xs font-black opacity-20 uppercase tracking-widest">暂无笔记</div>
-                )}
+                  </div>
+                ))}
               </div>
             </aside>
           </>
         )}
       </div>
 
-      <footer className={`h-12 px-6 flex items-center justify-between text-[10px] font-black z-20 ${theme === 'dark' ? 'bg-[#121212] text-white/20' : 'bg-white text-black/20'}`}>
-        <button onClick={() => renditionRef.current?.prev()} className="hover:text-blue-600 transition-colors uppercase tracking-widest">上一页</button>
-        <div className="hidden sm:block uppercase tracking-[0.2em]">E-READER PRO • CLOUD SYNCED</div>
-        <button onClick={() => renditionRef.current?.next()} className="hover:text-blue-600 transition-colors uppercase tracking-widest">下一页</button>
+      <footer className={`h-10 px-10 flex items-center justify-between text-[10px] font-black tracking-widest transition-colors ${theme === 'dark' ? 'bg-[#121212] border-t border-white/5 text-white/20' : 'bg-white border-t border-gray-50 text-gray-300'}`}>
+        <button onClick={() => renditionRef.current?.prev()} className="hover:text-blue-600 flex items-center gap-2 transition-colors"><ChevronLeft className="w-3 h-3" /> PREV</button>
+        <div className="uppercase">PRO READER ENGINE V2.1</div>
+        <button onClick={() => renditionRef.current?.next()} className="hover:text-blue-600 flex items-center gap-2 transition-colors">NEXT <ChevronRight className="w-3 h-3" /></button>
       </footer>
     </div>
   );

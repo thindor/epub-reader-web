@@ -34,18 +34,29 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const fetchSettings = async () => {
+    const settings = await dbService.get<SiteSettings>('settings', 'global');
+    if (settings) setSiteSettings(settings);
+  };
+
   useEffect(() => {
-    const fetchSettings = async () => {
-      const settings = await dbService.get<SiteSettings>('settings', 'global');
-      if (settings) setSiteSettings(settings);
-    };
     fetchSettings();
 
     const handleAuthChange = () => {
       setIsAdminLoggedIn(sessionStorage.getItem('admin_auth') === 'true');
     };
+    
+    const handleSettingsUpdate = () => {
+      fetchSettings();
+    };
+
     window.addEventListener('admin-auth-change', handleAuthChange);
-    return () => window.removeEventListener('admin-auth-change', handleAuthChange);
+    window.addEventListener('site-settings-update', handleSettingsUpdate);
+    
+    return () => {
+      window.removeEventListener('admin-auth-change', handleAuthChange);
+      window.removeEventListener('site-settings-update', handleSettingsUpdate);
+    };
   }, []);
 
   const navItems = [

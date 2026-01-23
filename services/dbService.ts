@@ -1,8 +1,8 @@
 
 import { AppState, Book, Author, Category, Tag, User, Bookmark, ShelfItem, Annotation, SiteSettings } from '../types';
 
-const DB_NAME = 'EReaderProDB';
-const DB_VERSION = 6; // 提升版本号以强制触发 schema 更新
+const DB_NAME = 'EReaderProDB_Final'; 
+const DB_VERSION = 2;
 
 export const dbService = {
   init: (): Promise<IDBDatabase> => {
@@ -14,67 +14,43 @@ export const dbService = {
         const db = event.target.result;
         
         // 核心表
-        if (!db.objectStoreNames.contains('books')) db.createObjectStore('books', { keyPath: 'id' });
-        if (!db.objectStoreNames.contains('authors')) db.createObjectStore('authors', { keyPath: 'id' });
-        if (!db.objectStoreNames.contains('categories')) db.createObjectStore('categories', { keyPath: 'id' });
-        if (!db.objectStoreNames.contains('tags')) db.createObjectStore('tags', { keyPath: 'id' });
-        if (!db.objectStoreNames.contains('users')) db.createObjectStore('users', { keyPath: 'id' });
-        if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'id' });
-        
-        // 业务表
-        if (!db.objectStoreNames.contains('bookmarks')) {
-          const bookmarkStore = db.createObjectStore('bookmarks', { keyPath: 'id' });
-          bookmarkStore.createIndex('by-user-book', ['userId', 'bookId'], { unique: false });
-        }
-
-        if (!db.objectStoreNames.contains('shelf')) {
-          const shelfStore = db.createObjectStore('shelf', { keyPath: 'id' });
-          shelfStore.createIndex('userId', 'userId', { unique: false });
-        }
-
-        if (!db.objectStoreNames.contains('annotations')) {
-          const annotationStore = db.createObjectStore('annotations', { keyPath: 'id' });
-          annotationStore.createIndex('userId', 'userId', { unique: false });
-          annotationStore.createIndex('bookId', 'bookId', { unique: false });
-        }
+        const stores = ['books', 'authors', 'categories', 'tags', 'users', 'settings', 'bookmarks', 'shelf', 'annotations'];
+        stores.forEach(s => {
+          if (!db.objectStoreNames.contains(s)) {
+            const store = db.createObjectStore(s, { keyPath: 'id' });
+            if (s === 'annotations' || s === 'bookmarks') {
+              store.createIndex('userId', 'userId', { unique: false });
+              store.createIndex('bookId', 'bookId', { unique: false });
+            }
+          }
+        });
       };
     });
   },
 
   getAll: async <T>(storeName: string): Promise<T[]> => {
-    const db = await dbService.init();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(storeName, 'readonly');
-      const store = transaction.objectStore(storeName);
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  },
-
-  get: async <T>(storeName: string, id: string): Promise<T | null> => {
-    const db = await dbService.init();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(storeName, 'readonly');
-      const store = transaction.objectStore(storeName);
-      const request = store.get(id);
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error);
-    });
+    try {
+      const db = await dbService.init();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      });
+    } catch (e) {
+      return [];
+    }
   },
 
   put: async (storeName: string, item: any): Promise<void> => {
     const db = await dbService.init();
     return new Promise((resolve, reject) => {
-      try {
-        const transaction = db.transaction(storeName, 'readwrite');
-        const store = transaction.objectStore(storeName);
-        const request = store.put(item);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(request.error);
-      } catch (err) {
-        reject(err);
-      }
+      const transaction = db.transaction(storeName, 'readwrite');
+      const store = transaction.objectStore(storeName);
+      const request = store.put(item);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
     });
   },
 
@@ -84,8 +60,23 @@ export const dbService = {
       const transaction = db.transaction(storeName, 'readwrite');
       const store = transaction.objectStore(storeName);
       const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
     });
+  },
+
+  get: async <T>(storeName: string, id: string): Promise<T | null> => {
+    try {
+      const db = await dbService.init();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(storeName, 'readonly');
+        const store = transaction.objectStore(storeName);
+        const request = store.get(id);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+      });
+    } catch (e) {
+      return null;
+    }
   }
 };

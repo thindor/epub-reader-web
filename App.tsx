@@ -255,11 +255,12 @@ const BookDetailPage: React.FC = () => {
 
 const SettingsPage: React.FC = () => {
   const { t, lang, setLang } = useTranslation();
+  const [isSaving, setIsSaving] = useState(false);
   const [siteSettings, setSiteSettings] = useState<SiteSettings>({
     id: 'global',
     siteName: '微信读书',
   });
-  const [isAdminLoggedIn] = useState<boolean>(() => sessionStorage.getItem('admin_auth') === 'true');
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => sessionStorage.getItem('admin_auth') === 'true');
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -267,6 +268,12 @@ const SettingsPage: React.FC = () => {
       if (settings) setSiteSettings(settings);
     };
     fetchSettings();
+
+    const handleAuthChange = () => {
+      setIsAdminLoggedIn(sessionStorage.getItem('admin_auth') === 'true');
+    };
+    window.addEventListener('admin-auth-change', handleAuthChange);
+    return () => window.removeEventListener('admin-auth-change', handleAuthChange);
   }, []);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -280,9 +287,17 @@ const SettingsPage: React.FC = () => {
   };
 
   const saveGlobalSettings = async () => {
-    await dbService.put('settings', siteSettings);
-    // 触发全局通知而非重载
-    alert(t('bookmarkSaved'));
+    setIsSaving(true);
+    try {
+      await dbService.put('settings', siteSettings);
+      // 派发全局同步事件
+      window.dispatchEvent(new Event('site-settings-update'));
+      alert("配置已成功保存并同步");
+    } catch (e) {
+      alert("保存配置失败，请重试");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -308,7 +323,7 @@ const SettingsPage: React.FC = () => {
                   type="text" 
                   value={siteSettings.siteName} 
                   onChange={e => setSiteSettings(prev => ({ ...prev, siteName: e.target.value }))}
-                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 font-bold text-sm outline-none"
+                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 font-bold text-sm outline-none ring-2 ring-transparent focus:ring-blue-100 transition-all"
                 />
               </div>
               <div>
@@ -325,9 +340,10 @@ const SettingsPage: React.FC = () => {
               </div>
               <button 
                 onClick={saveGlobalSettings}
-                className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-black shadow-lg shadow-blue-100 flex items-center justify-center gap-2 hover:bg-blue-700 transition-all"
+                disabled={isSaving}
+                className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-black shadow-lg shadow-blue-100 flex items-center justify-center gap-2 hover:bg-blue-700 disabled:bg-gray-200 transition-all"
               >
-                <Save className="w-4 h-4" /> {t('saveSettings')}
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} {t('saveSettings')}
               </button>
             </div>
           </div>
